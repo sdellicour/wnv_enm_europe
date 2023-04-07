@@ -97,7 +97,7 @@ nutsM_data[which(nutsM_data[,"country"]%in%c("Bosnia and Herzegovina","Switzerla
 contour = unionSpatialPolygons(nutsM, rep(1,length(nutsM)))
 if (savingPlots)
 	{
-		pdf("WNV_cases_maps_NEW.pdf", width=8, height=5.7)
+		pdf("WNV_cases_map1_NEW.pdf", width=8, height=5.7) # 1° version
 		par(mfrow=c(1,2), oma=c(0.1,0.1,0.1,0.1), mar=c(0,0,0,0), lwd=0.2, col="gray30")
 		colourScale = colorRampPalette(brewer.pal(9,"YlOrBr"))(131)[21:121]
 		cases_per_km2 = nuts3_data[,"observations"]/area(nuts3,unit="km")
@@ -118,6 +118,89 @@ if (savingPlots)
 		cols[which(is.na(cases_per_km2))] = "gray80"
 		plot(contour, lwd=0.4, border="gray30", col=NA)
 		plot(nutsM, col=cols, border="gray50", lwd=0.1, add=T)
+		dev.off()
+
+		population = brick(paste0("Environmental_rasters/ISIMIP3a/population_histsoc_0p5deg_annual_2000_2019_timmean.nc4"), varname="total-population")
+		population_log_nuts3 = rep(NA, dim(nuts3@data)[1]); population_log_nutsM = rep(NA, dim(nutsM@data)[1])
+		population_nuts3 = rep(NA, dim(nuts3@data)[1]); population_nutsM = rep(NA, dim(nutsM@data)[1])
+		for (j in 1:length(nuts3))
+			{
+				maxArea = 0; polIndex = 0
+				for (k in 1:length(nuts3@polygons[[j]]@Polygons))
+					{
+						if (maxArea < nuts3@polygons[[j]]@Polygons[[k]]@area)
+							{
+								maxArea = nuts3@polygons[[j]]@Polygons[[k]]@area; polIndex = k
+							}
+					}
+				pol1 = nuts3@polygons[[j]]@Polygons[[polIndex]]; p = Polygon(pol1@coords)
+				ps = Polygons(list(p),1); sps = SpatialPolygons(list(ps))
+				pol2 = sf::st_as_sfc(sps); st_crs(pol2) = crs(nutsM)
+				if (j == 1) crs(population) = crs(pol2) 
+				population_log_nuts3[j] = log10(exactextractr::exact_extract(population,pol2,fun="sum")+1)
+				population_nuts3[j] = exactextractr::exact_extract(population,pol2,fun="sum")
+			}
+		for (j in 1:length(nutsM))
+			{
+				maxArea = 0; polIndex = 0
+				for (k in 1:length(nutsM@polygons[[j]]@Polygons))
+					{
+						if (maxArea < nutsM@polygons[[j]]@Polygons[[k]]@area)
+							{
+								maxArea = nutsM@polygons[[j]]@Polygons[[k]]@area; polIndex = k
+							}
+					}
+				pol1 = nutsM@polygons[[j]]@Polygons[[polIndex]]; p = Polygon(pol1@coords)
+				ps = Polygons(list(p),1); sps = SpatialPolygons(list(ps))
+				pol2 = sf::st_as_sfc(sps); st_crs(pol2) = crs(nutsM)
+				if (j == 1) crs(population) = crs(pol2) 
+				population_log_nutsM[j] = log10(exactextractr::exact_extract(population,pol2,fun="sum")+1)
+				population_nutsM[j] = exactextractr::exact_extract(population,pol2,fun="sum")
+			}
+		pdf("WNV_cases_map2_NEW.pdf", width=8, height=5.0) # 2° version
+		par(mfrow=c(2,4), oma=c(0,0,0,0.6), mar=c(0,0,0,1.5), lwd=0.2, col="gray30")		
+		colourScale = colorRampPalette(brewer.pal(9,"YlOrBr"))(131)[21:121]
+		cases_per_km2 = nuts3_data[,"observations"]/area(nuts3,unit="km")
+		cases_per_km2[which(cases_per_km2>(10^-8))] = 10^-8
+		cols = colourScale[((cases_per_km2/(10^-8))*100)+1]
+		cols[which(cases_per_km2==0)] = "gray90"
+		cols[which(is.na(cases_per_km2))] = "gray70"
+		plot(contour, lwd=0.4, border="gray30", col=NA)
+		plot(nuts3, col=cols, border="gray50", lwd=0.1, add=T)
+		mtext(expression(bold(A)), side=3, line=-1.6, at=-9, cex=0.70, col="gray30")
+		mtext("WNV cases/km2", side=3, line=-2.7, at=0, cex=0.45, col="gray30")
+		cases_per_km2 = nutsM_data[,"observations"]/area(nutsM,unit="km")
+		cases_per_km2[which(cases_per_km2>(10^-8))] = 10^-8
+		cols = colourScale[((cases_per_km2/(10^-8))*100)+1]
+		cols[which(cases_per_km2==0)] = "gray90"
+		cols[which(is.na(cases_per_km2))] = "gray70"
+		plot(contour, lwd=0.4, border="gray30", col=NA)
+		plot(nutsM, col=cols, border="gray50", lwd=0.1, add=T)
+		mtext("WNV cases/km2", side=3, line=-2.7, at=0, cex=0.45, col="gray30")
+		rast = raster(as.matrix(c(0,10^-8)))
+		plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.840,0.855,0.05,0.50), adj=3,
+			 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.0, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
+		colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(131)[21:121]
+		cases_per_10E5people = (nuts3_data[,"observations"]/population_nuts3)*(10^5)
+		cases_per_10E5people[which(cases_per_10E5people>(100))] = 100
+		cols = colourScale[((cases_per_10E5people/100)*100)+1]
+		cols[which(cases_per_10E5people==0)] = "gray90"
+		cols[which(is.na(cases_per_10E5people))] = "gray70"
+		plot(contour, lwd=0.4, border="gray30", col=NA)
+		plot(nuts3, col=cols, border="gray50", lwd=0.1, add=T)
+		mtext(expression(bold(B)), side=3, line=-1.6, at=-9, cex=0.70, col="gray30")
+		mtext("WNV cases/105 people", side=3, line=-2.7, at=0, cex=0.45, col="gray30")
+		cases_per_10E5people = (nutsM_data[,"observations"]/population_nutsM)*(10^5)
+		cases_per_10E5people[which(cases_per_10E5people>(100))] = 100
+		cols = colourScale[((cases_per_10E5people/100)*100)+1]
+		cols[which(cases_per_10E5people==0)] = "gray90"
+		cols[which(is.na(cases_per_10E5people))] = "gray70"
+		plot(contour, lwd=0.4, border="gray30", col=NA)
+		plot(nutsM, col=cols, border="gray50", lwd=0.1, add=T)
+		mtext("WNV cases/105 people", side=3, line=-2.7, at=0, cex=0.45, col="gray30")
+		rast = raster(as.matrix(c(0,100)))
+		plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.840,0.855,0.05,0.50), adj=3,
+			 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.0, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
 		dev.off()
 	}
 
@@ -215,7 +298,7 @@ if (!file.exists("Training_dFrames.rds"))
 				nutsM_datas[[i]] = cbind(nutsM_data, environmentalValues)
 				if ((i == 1)&(savingPlots))
 					{
-						pdf("Vars_GSWP3W5E5_NEW.pdf", width=8, height=4.8); par(mfrow=c(2,4), oma=c(0,0,0,0.6), mar=c(0,0,0,0.8), lwd=0.2, col="gray30")		
+						pdf("All_env_factors_1_NEW.pdf", width=8, height=4.8); par(mfrow=c(2,4), oma=c(0,0,0,0.6), mar=c(0,0,0,0.8), lwd=0.2, col="gray30") # 1° version
 						colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
 						cols = colourScale[(((environmentalValues[,3]-min(environmentalValues[,3],na.rm=T))/(max(environmentalValues[,3],na.rm=T)-min(environmentalValues[,3],na.rm=T)))*100)+1]
 						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
@@ -272,6 +355,134 @@ if (!file.exists("Training_dFrames.rds"))
 						mtext("Human population", side=3, line=-1.5, at=0, cex=0.50, col="gray30"); mtext("density (log10/km2)", side=3, line=-2.2, at=0, cex=0.50, col="gray30")
 						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.870,0.885,0.05,0.95), adj=3,
 							 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.0, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
+						dev.off()
+						pdf("All_env_factors_2_NEW.pdf", width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30") # 2° version
+						colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,1]-min(environmentalValues[,1:4],na.rm=T))/(max(environmentalValues[,1:4],na.rm=T)-min(environmentalValues[,1:4],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,1:4],na.rm=T),max(environmentalValues[,1:4],na.rm=T))))
+						mtext("Air temperature", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(winter, °C)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,2]-min(environmentalValues[,1:4],na.rm=T))/(max(environmentalValues[,1:4],na.rm=T)-min(environmentalValues[,1:4],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,1:4],na.rm=T),max(environmentalValues[,1:4],na.rm=T))))
+						mtext("Air temperature", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(spring, °C)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,3]-min(environmentalValues[,1:4],na.rm=T))/(max(environmentalValues[,1:4],na.rm=T)-min(environmentalValues[,1:4],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,1:4],na.rm=T),max(environmentalValues[,1:4],na.rm=T))))
+						mtext("Air temperature", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(summer, °C)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,4]-min(environmentalValues[,1:4],na.rm=T))/(max(environmentalValues[,1:4],na.rm=T)-min(environmentalValues[,1:4],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,1:4],na.rm=T),max(environmentalValues[,1:4],na.rm=T))))
+						mtext("Air temperature", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(fall, °C)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = c("#E5E5E5",colorRampPalette(c("gray97","chartreuse4"),bias=1)(121)[21:121])
+						cols = colourScale[(((environmentalValues[,13]-min(environmentalValues[,13],na.rm=T))/(max(environmentalValues[,13],na.rm=T)-min(environmentalValues[,13],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,13],na.rm=T),max(environmentalValues[,13],na.rm=T))))
+						mtext("Primary forested", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("areas", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = c("#E5E5E5",colorRampPalette(c("gray97","darkseagreen4"),bias=1)(121)[21:121])
+						cols = colourScale[(((environmentalValues[,14]-min(environmentalValues[,14],na.rm=T))/(max(environmentalValues[,14],na.rm=T)-min(environmentalValues[,14],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,14],na.rm=T),max(environmentalValues[,14],na.rm=T))))
+						mtext("Primary non-forested", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("areas", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlGnBu"))(101)
+						cols = colourScale[(((environmentalValues[,5]-min(environmentalValues[,5:8],na.rm=T))/(max(environmentalValues[,5:8],na.rm=T)-min(environmentalValues[,5:8],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,5:8],na.rm=T),max(environmentalValues[,5:8],na.rm=T))))
+						mtext("Precipitation", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(winter, kg/m2/day)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlGnBu"))(101)
+						cols = colourScale[(((environmentalValues[,6]-min(environmentalValues[,5:8],na.rm=T))/(max(environmentalValues[,5:8],na.rm=T)-min(environmentalValues[,5:8],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,5:8],na.rm=T),max(environmentalValues[,5:8],na.rm=T))))
+						mtext("Precipitation", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(spring, kg/m2/day)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlGnBu"))(101)
+						cols = colourScale[(((environmentalValues[,7]-min(environmentalValues[,5:8],na.rm=T))/(max(environmentalValues[,5:8],na.rm=T)-min(environmentalValues[,5:8],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,5:8],na.rm=T),max(environmentalValues[,5:8],na.rm=T))))
+						mtext("Precipitation", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(summer, kg/m2/day)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"YlGnBu"))(101)
+						cols = colourScale[(((environmentalValues[,8]-min(environmentalValues[,5:8],na.rm=T))/(max(environmentalValues[,5:8],na.rm=T)-min(environmentalValues[,5:8],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,5:8],na.rm=T),max(environmentalValues[,5:8],na.rm=T))))
+						mtext("Precipitation", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(fall, kg/m2/day)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = c("#E5E5E5",colorRampPalette(c("gray97","burlywood3"),bias=1)(121)[21:121])
+						cols = colourScale[(((environmentalValues[,18]-min(environmentalValues[,18],na.rm=T))/(max(environmentalValues[,18],na.rm=T)-min(environmentalValues[,18],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,18],na.rm=T),max(environmentalValues[,18],na.rm=T))))
+						mtext("Pastures and", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("rangeland", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = c("#E5E5E5",colorRampPalette(c("gray97","olivedrab3"),bias=1)(121)[21:121])
+						cols = colourScale[(((environmentalValues[,15]-min(environmentalValues[,15],na.rm=T))/(max(environmentalValues[,15],na.rm=T)-min(environmentalValues[,15],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,15],na.rm=T),max(environmentalValues[,15],na.rm=T))))
+						mtext("Secondary forested", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("areas", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,9]-min(environmentalValues[,9:12],na.rm=T))/(max(environmentalValues[,9:12],na.rm=T)-min(environmentalValues[,9:12],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,9:12],na.rm=T),max(environmentalValues[,9:12],na.rm=T))))
+						mtext("Relative humidity", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(winter, %)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,10]-min(environmentalValues[,9:12],na.rm=T))/(max(environmentalValues[,9:12],na.rm=T)-min(environmentalValues[,9:12],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,9:12],na.rm=T),max(environmentalValues[,9:12],na.rm=T))))
+						mtext("Relative humidity", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(spring, %)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,11]-min(environmentalValues[,9:12],na.rm=T))/(max(environmentalValues[,9:12],na.rm=T)-min(environmentalValues[,9:12],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,9:12],na.rm=T),max(environmentalValues[,9:12],na.rm=T))))
+						mtext("Relative humidity", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(summer, %)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
+						cols = colourScale[(((environmentalValues[,12]-min(environmentalValues[,9:12],na.rm=T))/(max(environmentalValues[,9:12],na.rm=T)-min(environmentalValues[,9:12],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,9:12],na.rm=T),max(environmentalValues[,9:12],na.rm=T))))
+						mtext("Relative humidity", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(fall, %)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = c("#E5E5E5",colorRampPalette(c("gray97","navajowhite4"),bias=1)(121)[21:121])
+						cols = colourScale[(((environmentalValues[,17]-min(environmentalValues[,17],na.rm=T))/(max(environmentalValues[,17],na.rm=T)-min(environmentalValues[,17],na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(environmentalValues[,17],na.rm=T),max(environmentalValues[,17],na.rm=T))))
+						mtext("Croplands", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("(all categories)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
+						colourScale = colorRampPalette(brewer.pal(9,"BuPu"))(151)[21:121]; values = environmentalValues[,19]; values[values>(10^-8)] = (10^-8)
+						cols = colourScale[(((values-min(values,na.rm=T))/(max(values,na.rm=T)-min(values,na.rm=T)))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, lwd=0.1, add=T)
+						rast = raster(as.matrix(c(min(values,na.rm=T),max(values,na.rm=T))))
+						mtext("Human population", side=3, line=-1.1, at=5, cex=0.37, col="gray30"); mtext("density (log10/km2)", side=3, line=-1.6, at=5, cex=0.37, col="gray30")
+						plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+							 axis.args=list(cex.axis=0.55, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-0.8, col.axis="gray30", line=0, mgp=c(0,0.30,0)), alpha=1, side=3)
 						dev.off()
 					}
 			}
@@ -676,7 +887,7 @@ if (savingPlots)
 	{
 		for (i in 1:length(nutsM_projections1))
 			{
-				pdf(paste0("ISIMIP3a_model_",i,"_NEW.pdf"), width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")		
+				pdf(paste0("ISIMIP3a_projections/ISIMIP3a_",models_isimip3a_names[i],".pdf"), width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")		
 				colourScale = rev(colorRampPalette(brewer.pal(11,"RdBu"))(121)[11:111])
 				for (h in 1:length(scenarios))
 					{
@@ -702,6 +913,101 @@ if (savingPlots)
 											 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.2, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
 									}								
 							}
+					}
+				dev.off()
+			}
+		min_max_values_1 = matrix(nrow=12, ncol=2)
+		for (i in 1:12)
+			{
+				minV = 9999; maxV = -9999
+				for (j in 1:length(nutsM_datas1))
+					{
+						for (g in 1:length(year_intervals))
+							{
+								if (min(nutsM_datas1[[j]][[2]][[g]][,i],na.rm=T) < minV) minV = min(nutsM_datas1[[j]][[2]][[g]][,i],na.rm=T)
+								if (max(nutsM_datas1[[j]][[2]][[g]][,i],na.rm=T) > maxV) maxV = max(nutsM_datas1[[j]][[2]][[g]][,i],na.rm=T)
+							}
+					}
+				min_max_values_1[i,1] = minV; min_max_values_1[i,2] = maxV
+			}
+		for (i in 1:12)
+			{
+				pdf(paste0("ISIMIP3a_envVariables/Abs_values/ISIMIP3a_",colnames(nutsM_datas1[[1]][[2]][[1]])[i],"_values.pdf"), width=8, height=7.73)
+				par(mfrow=c(4,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")	
+				if (i %in% c(1:4)) colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
+				if (i %in% c(5:8)) colourScale = colorRampPalette(brewer.pal(9,"YlGnBu"))(101)
+				if (i %in% c(9:12)) colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
+				for (j in 1:length(nutsM_datas1))
+					{
+						for (g in 1:length(year_intervals))
+							{
+								cols = colourScale[(((nutsM_datas1[[j]][[2]][[g]][,i]-min_max_values_1[i,1])/(min_max_values_1[i,2]-min_max_values_1[i,1]))*100)+1]
+								plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=cols, lwd=0.1, add=T)
+								# if ((j == 1)&(g == 1)) mtext(expression(bold(A)), side=3, line=-1.4, at=-8.5, cex=0.70, col="gray30")
+								# if ((j == 2)&(g == 1)) mtext(expression(bold(B)), side=3, line=-1.4, at=-8.5, cex=0.70, col="gray30")
+								# if ((j == 3)&(g == 1)) mtext(expression(bold(C)), side=3, line=-1.4, at=-8.5, cex=0.70, col="gray30")
+								# if ((j == 4)&(g == 1)) mtext(expression(bold(D)), side=3, line=-1.4, at=-8.5, cex=0.70, col="gray30")
+								if (g == 1) mtext(models_isimip3a_names[j], side=3, line=-1.7, at=1, cex=0.50, col="gray30")
+								if (j == 1) mtext(gsub("_","-",year_intervals[g]), side=3, line=-2.5, at=1, cex=0.50, col="gray30")
+								if ((j == 4)&(g == length(year_intervals)))
+									{
+										rast = raster(as.matrix(cbind(min_max_values_1[i,1],min_max_values_1[i,2])))
+										plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+											 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.2, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
+									}								
+							}						
+					}
+				dev.off()
+			}
+		min_max_values_2 = matrix(nrow=12, ncol=2)
+		for (i in 1:12)
+			{
+				minV = 9999; maxV = -9999
+				for (j in 1:length(nutsM_datas1))
+					{
+						for (g in 1:length(year_intervals))
+							{
+								if (min(nutsM_datas1[[j]][[2]][[g]][,i]-nutsM_datas1[[j]][[2]][[6]][,i],na.rm=T) < minV) minV = min(nutsM_datas1[[j]][[2]][[g]][,i]-nutsM_datas1[[j]][[2]][[6]][,i],na.rm=T)
+								if (max(nutsM_datas1[[j]][[2]][[g]][,i]-nutsM_datas1[[j]][[2]][[6]][,i],na.rm=T) > maxV) maxV = max(nutsM_datas1[[j]][[2]][[g]][,i]-nutsM_datas1[[j]][[2]][[6]][,i],na.rm=T)
+							}
+					}
+				if (abs(minV) < abs(maxV)) minV = -maxV
+				if (abs(maxV) < abs(minV)) maxV = -minV
+				min_max_values_2[i,1] = minV; min_max_values_2[i,2] = maxV
+			}
+		for (i in 1:12)
+			{
+				pdf(paste0("ISIMIP3a_envVariables/Differences/ISIMIP3a_",colnames(nutsM_datas1[[1]][[2]][[1]])[i],"_difference.pdf"), width=8, height=7.73)
+				par(mfrow=c(4,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")	
+				for (j in 1:length(nutsM_datas1))
+					{
+						for (g in 1:(length(year_intervals)-1))
+							{
+								colourScale = rev(colorRampPalette(brewer.pal(11,"PuOr"))(121)[11:111])
+								differences = nutsM_datas1[[j]][[2]][[g]][,i]-nutsM_datas1[[j]][[2]][[6]][,i]
+								cols = colourScale[(((differences-min_max_values_2[i,1])/(min_max_values_2[i,2]-min_max_values_2[i,1]))*100)+1]
+								plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=NA, add=T)
+								if (j == 1) mtext(gsub("_","-",year_intervals[g]), side=3, line=-2.5, at=1, cex=0.50, col="gray30")
+								if (g == 1) mtext(models_isimip3a_names[j], side=3, line=-1.7, at=1, cex=0.50, col="gray30")
+								if ((j == length(nutsM_datas1))&(g == (length(year_intervals)-1)))
+									{
+										rast = raster(as.matrix(cbind(min_max_values_2[i,1],min_max_values_2[i,2])))
+										plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+											 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.2, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
+									}					
+							}						
+						if (i %in% c(1:4)) colourScale = colorRampPalette(brewer.pal(9,"YlOrRd"))(151)[1:101]
+						if (i %in% c(5:8)) colourScale = colorRampPalette(brewer.pal(9,"YlGnBu"))(101)
+						if (i %in% c(9:12)) colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
+						cols = colourScale[(((nutsM_datas1[[j]][[2]][[1]][,i]-min_max_values_1[i,1])/(min_max_values_1[i,2]-min_max_values_1[i,1]))*100)+1]
+						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=cols, lwd=0.1, add=T)			
+						if (j == 1) mtext(gsub("_","-",year_intervals[g]), side=3, line=-2.5, at=1, cex=0.50, col="gray30")
+						if (j == length(nutsM_datas1))
+							{
+								rast = raster(as.matrix(cbind(min_max_values_1[i,1],min_max_values_1[i,2])))
+								plot(rast, legend.only=T, add=T, col=colourScale, legend.width=0.5, legend.shrink=0.3, smallplot=c(0.060,0.080,0.75,0.96), adj=3,
+									 axis.args=list(cex.axis=0.65, lwd=0, col="gray30", lwd.tick=0.2, col.tick="gray30", tck=-1.2, col.axis="gray30", line=0, mgp=c(0,0.45,0)), alpha=1, side=3)
+							}								
 					}
 				dev.off()
 			}
@@ -993,7 +1299,7 @@ if (savingPlots)
 	{
 		for (i in 1:length(nutsM_projections1))
 			{
-				pdf(paste0("ISIMIP3b_model_",i,"_NEW.pdf"), width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")		
+				pdf(paste0("ISIMIP3b_projections/ISIMIP3b_",models_isimip3b_names[i],".pdf"), width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")		
 				colourScale = rev(colorRampPalette(brewer.pal(11,"RdBu"))(121)[11:111])
 				for (h in 1:length(scenarios))
 					{
