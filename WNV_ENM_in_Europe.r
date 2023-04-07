@@ -1001,7 +1001,7 @@ if (savingPlots)
 						if (i %in% c(9:12)) colourScale = colorRampPalette(brewer.pal(9,"PuBu"))(151)[1:101]
 						cols = colourScale[(((nutsM_datas1[[j]][[2]][[1]][,i]-min_max_values_1[i,1])/(min_max_values_1[i,2]-min_max_values_1[i,1]))*100)+1]
 						plot(contour, lwd=0.4, border="gray30", col=NA); plot(nutsM, col=cols, border=cols, lwd=0.1, add=T)			
-						if (j == 1) mtext(gsub("_","-",year_intervals[g]), side=3, line=-2.5, at=1, cex=0.50, col="gray30")
+						if (j == 1) mtext(gsub("_","-",year_intervals[length(year_intervals)]), side=3, line=-2.5, at=1, cex=0.50, col="gray30")
 						if (j == length(nutsM_datas1))
 							{
 								rast = raster(as.matrix(cbind(min_max_values_1[i,1],min_max_values_1[i,2])))
