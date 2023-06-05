@@ -1,12 +1,3 @@
-# Note on the environmental rasters:
-	# - 4 models for the past and present projections (obsclim and counterclim): GSWP3-W5E5, 20CRv3, 20CRv3-ERA5, and 20CRv3-W5E5;
-	#		and 6 periods: 1901-1919, 1920-1939, 1940-1959, 1960-1979, 1980-1999, and 2000-2019 for temperature, precipitation and
-	#		relative humidity. Population and land cover data do not change between models
-	# - 10 models for the future projections (bias-adjusted): MRI-ESM2-0, MPI-ESM1-2-HR, MIROC6, IPSL-CM6A-LR, GFDL-ESM4, EC-Earth3,
-	#		CNRM-ESM2-1, CNRM-CM6-1, CanESM5, and UKESM1-0-LL; and 5 periods: 1995-2014, 2020-2039, 2040-2059, 2060-2079, and 2080-2099
-	# - climatic variables: "hur" = near surface relative humidity, "pr" = precipitation, and "tas" = near surface air temperature;
-	#		units: relative humidity in % (??, some values >100), temperature in Kelvins (°C+273.15), and precipitation in kg/m2/second
-
 library(blockCV)
 library(dismo)
 library(exactextractr)
@@ -503,7 +494,7 @@ samplingPtsMinDist = function(observations, minDist=500, nberOfPoints=5)
     				if (length(selection) == 0)
     					{
     						stop("Restarts the function with a smaller minimum distance")
-					}
+						}
     				selection_list[[i]] = selection
     				test = table(unlist(selection_list))
     				indices_minDist = as.numeric(names(which(test==i)))
@@ -878,6 +869,16 @@ for (i in 1:length(models_isimip3a))
 								nutsM_projection4[,j] = predict.gbm(brt_model_scvs[[j]], df, n.trees, type, single.tree)
 							}
 						nutsM_projections3[[g]] = nutsM_projection4
+						if ((models_isimip3a[i]=="gswp3-w5e5")&(scenarios[h]=="obsclim")&(year_intervals[g]=="1901_1919"))
+							{
+								projections_1901_1919_GSWP3_W5E5 = nutsM_projection4
+								envValues_1901_1919_GSWP3_W5E5 = df
+							}
+						if ((models_isimip3a[i]=="gswp3-w5e5")&(scenarios[h]=="obsclim")&(year_intervals[g]=="2000_2019"))
+							{
+								projections_2000_2019_GSWP3_W5E5 = nutsM_projection4
+								envValues_2000_2019_GSWP3_W5E5 = df
+							}
 					}
 				nutsM_projections2[[h]] = nutsM_projections3
 			}
@@ -1066,17 +1067,73 @@ if (savingPlots)
 					}
 				colnames(tab) = colNames
 				if (savingFiles) write.csv(tab, paste0("ISIMIP3a_model1_",gsub("\\.",",",as.character(thresholds[i])),".csv"), row.names=F, quote=F)
-				pdf(paste0("ISIMIP3a_violin_",gsub("\\.",",",as.character(thresholds[i])),"_NEW.pdf"), width=4, height=2.2)
+				pdf(paste0("ISIMIP3a_violin_plots_NEW1.pdf"), width=4, height=2.2)
 				par(mfrow=c(1,1), oma=c(0,0,0,0), mar=c(1.5,1.5,0,0), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
 				if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.55*(10^8),1.9*(10^8)), axes=F, ann=F)
 				if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.3*(10^7),5.7*(10^7)), axes=F, ann=F)
 				vioplot(tab, ann=F, axes=F, at=rep(c(1910,1930,1950,1970,1990,2010)/10,2), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
-				axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030), mgp=c(0,0.11,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
-				if (i == 1) axis(2, at=seq(0.3*(10^8),2.1*(10^8),3*(10^7)), labels=c(30,60,90,120,150,180,210), mgp=c(1,0.30,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
+				axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030), 
+					 mgp=c(0,0.11,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
+				if (i == 1) axis(2, at=seq(0.3*(10^8),2.1*(10^8),3*(10^7)), labels=c(30,60,90,120,150,180,210), 
+					 mgp=c(1,0.30,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
 				if (i == 2) axis(2, at=seq(0,6*(10^7),10^7), labels=c(0,10,20,30,40,50,60), mgp=c(1,0.30,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
 				dev.off()
 			}
-		pdf(paste0("ISIMIP3a_violin_SI_NEW.pdf"), width=8, height=3.6)
+		pdf(paste0("ISIMIP3a_violin_plots_NEW2.pdf"), width=8, height=3.3)
+		par(mfrow=c(2,4), oma=c(0,1,0.5,0), mar=c(1.5,2.2,0.5,0.75), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
+		for (i in 1:length(thresholds))
+			{
+				for (h in 1:length(models_isimip3a))
+					{
+						tab = matrix(nrow=10, ncol=12); colNames = c()
+						for (j in 1:length(year_intervals))
+							{
+								colNames = c(colNames, paste0(year_intervals[j],"_counterclim"))
+								for (k in 1:dim(nutsM_projections1[[h]][[1]][[j]])[2])
+									{
+										vS = population_counts[,j]
+										vS[which(nutsM_projections1[[h]][[1]][[j]][,k]<thresholds[i])] = 0
+										tab[k,j] = sum(vS)
+									}
+								
+							}
+						for (j in 1:length(year_intervals))
+							{
+								colNames = c(colNames, paste0(year_intervals[j],"_obsclim"))
+								for (k in 1:dim(nutsM_projections1[[h]][[2]][[j]])[2])
+									{
+										vS = population_counts[,j]
+										vS[which(nutsM_projections1[[h]][[2]][[j]][,k]<thresholds[i])] = 0
+										tab[k,6+j] = sum(vS)
+									}
+							}
+						colnames(tab) = colNames
+						if (savingFiles) write.csv(tab, paste0("ISIMIP3a_model",h,"_",gsub("\\.",",",as.character(thresholds[i])),".csv"), row.names=F, quote=F)
+						if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.57*(10^8),1.83*(10^8)), axes=F, ann=F)
+						if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.0*(10^7),6.2*(10^7)), axes=F, ann=F)
+						vioplot(tab, ann=F, axes=F, at=rep(c(1910,1930,1950,1970,1990,2010)/10,2), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
+						if (i == 1) 
+							{
+								axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030),
+									 mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
+								axis(2, at=seq(0.5*(10^8),1.9*(10^8),2*(10^7)), labels=c(50,70,90,110,130,150,170,190),
+									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
+							}
+						if (i == 2) 
+							{
+								axis(1, pos=0, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030),
+									 mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
+								axis(2, at=seq(0,7*(10^7),10^7), labels=c(0,10,20,30,40,50,60,70),
+									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
+							}
+						if (h == 1) title(ylab="Population at risk (in million people)", cex.lab=0.80, mgp=c(1.3,0,0), col.lab="gray30")
+						# mtext(paste0(models_isimip3a_names[h]," - ecological suitability >",as.character(thresholds[i])), side=3, at=196, line=-0.8, cex=0.5, col="gray30")
+						mtext(paste0(models_isimip3a_names[h]), side=3, adj=0, at=190.8, line=-0.6, cex=0.5, col="gray30")
+						mtext(paste0("ES >",as.character(thresholds[i])), side=3, adj=0, at=190.8, line=-1.4, cex=0.5, col="gray30")
+					}
+			}
+		dev.off()
+		pdf(paste0("ISIMIP3a_violin_plots_NEW3.pdf"), width=8, height=3.6)
 		par(mfrow=c(2,3), oma=c(0,1,0,0), mar=c(2,2.5,0,0), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
 		for (i in 1:length(thresholds))
 			{
@@ -1109,9 +1166,18 @@ if (savingPlots)
 						if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.63*(10^8),1.83*(10^8)), axes=F, ann=F)
 						if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.8*(10^7),6.2*(10^7)), axes=F, ann=F)
 						vioplot(tab, ann=F, axes=F, at=rep(c(1910,1930,1950,1970,1990,2010)/10,2), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
-						axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030), mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
-						if (i == 1) axis(2, at=seq(0.5*(10^8),1.9*(10^8),2*(10^7)), labels=c(50,70,90,110,130,150,170,190), mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
-						if (i == 2) axis(2, at=seq(0,7*(10^7),10^7), labels=c(0,10,20,30,40,50,60,70), mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
+						axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030),
+							 mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
+						if (i == 1)
+							{
+								axis(2, at=seq(0.5*(10^8),1.9*(10^8),2*(10^7)), labels=c(50,70,90,110,130,150,170,190),
+									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
+							}
+						if (i == 2)
+							{
+								axis(2, at=seq(0,7*(10^7),10^7), labels=c(0,10,20,30,40,50,60,70),
+									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
+							}
 						if (h == 2) title(ylab="Population at risk (in million people)", cex.lab=0.80, mgp=c(1.5,0,0), col.lab="gray30")
 						mtext(paste0(models_isimip3a_names[h]," - ecological suitability >",as.character(thresholds[i])), side=3, at=196, line=-0.8, cex=0.5, col="gray30")
 					}
@@ -1119,282 +1185,3 @@ if (savingPlots)
 		dev.off()
 	}
 
-# 5. Performing all the future ENM projections
-
-models_isimip3b = c("canesm5","cnrm-cm6-1","cnrm-esm2-1","ec-earth3","gfdl-esm4","ipsl-cm6a-lr","miroc6","mpi-esm1-2-hr","mri-esm2-0","ukesm1-0-ll")
-models_isimip3b_names = c("CanESM5","CNRM-CM6-1","CNRM-ESM2-1","EC-Earth3","GFDL-ESM4","IPSL-CM6A-LR","MIROC6","MPI-ESM1-2-HR","MRI-ESM2-0","UKESM1-0-LL")
-scenarios = c("ssp126","ssp370","ssp585"); year_intervals = c("2020_2039","2040_2059","2060_2079","2080_2099"); scenario_names = c("RCP 2.6 - SSP1","RCP 6.0 - SSP3","RCP 8.5 - SSP7")
-if (!file.exists("ISIMIP3b_dFrames.rds"))
-	{
-		nutsM_datas1 = list()
-		for (i in 1:length(models_isimip3b))
-			{
-				nutsM_datas2 = list()
-				for (h in 1:length(scenarios))
-					{
-						nutsM_datas3 = list()
-						for (g in 1:length(year_intervals))
-							{
-								environmentalValues = matrix(nrow=dim(nutsM_data)[1], ncol=length(envVariableNames)); colnames(environmentalValues) = envVariableNames
-								temperature = brick(paste0("Environmental_rasters/ISIMIP3b/tas_day_bias-adjusted_",scenarios[h],"_",models_isimip3b[i],"_",year_intervals[g],"_ymonmean.nc"))
-								temperature_winter = mean(temperature[[12]],temperature[[1]],temperature[[2]])-273.15 # conversion to Celcius degrees
-								temperature_spring = mean(temperature[[3]],temperature[[4]],temperature[[5]])-273.15 # conversion to Celcius degrees
-								temperature_summer = mean(temperature[[6]],temperature[[7]],temperature[[8]])-273.15 # conversion to Celcius degrees
-								temperature_inFall = mean(temperature[[9]],temperature[[10]],temperature[[11]])-273.15 # conversion to Celcius degrees
-								precipitation = brick(paste0("Environmental_rasters/ISIMIP3b/pr_day_bias-adjusted_",scenarios[h],"_",models_isimip3b[i],"_",year_intervals[g],"_ymonmean.nc"))
-								precipitation_winter = mean(precipitation[[12]],precipitation[[1]],precipitation[[2]])*60*60*24 # conversion to kg/m2/day
-								precipitation_spring = mean(precipitation[[3]],precipitation[[4]],precipitation[[5]])*60*60*24 # conversion to kg/m2/day
-								precipitation_summer = mean(precipitation[[6]],precipitation[[7]],precipitation[[8]])*60*60*24 # conversion to kg/m2/day
-								precipitation_inFall = mean(precipitation[[9]],precipitation[[10]],precipitation[[11]])*60*60*24 # conversion to kg/m2/day
-								relative_humidity = brick(paste0("Environmental_rasters/ISIMIP3b/hurs_day_bias-adjusted_",scenarios[h],"_",models_isimip3b[i],"_",year_intervals[g],"_ymonmean.nc"))
-								relative_humidity_winter = mean(relative_humidity[[12]],relative_humidity[[1]],relative_humidity[[2]])
-								relative_humidity_spring = mean(relative_humidity[[3]],relative_humidity[[4]],relative_humidity[[5]])
-								relative_humidity_summer = mean(relative_humidity[[6]],relative_humidity[[7]],relative_humidity[[8]])
-								relative_humidity_inFall = mean(relative_humidity[[9]],relative_humidity[[10]],relative_humidity[[11]])
-								land_cover = nc_open(paste0("Environmental_rasters/ISIMIP3b/landcover_",scenarios[h],"_annual_",year_intervals[g],"_timmean.nc4"))
-								population = brick(paste0("Environmental_rasters/ISIMIP3b/population_bias-adjustedsoc_5min_annual_",year_intervals[g],"_timmean.nc4"), varname="number_of_people")
-								landCoverVariableIDs = names(land_cover$var); land_covers1 = list(); land_covers2 = list(); land_covers3 = list()
-								landCoverVariableNames = as.character(read.csv("Environmental_rasters/Luse.csv")[1:12,2])
-								for (j in 2:13)
-									{
-										land_covers1[[j-1]] = brick(paste0("Environmental_rasters/ISIMIP3b/landcover_",scenarios[h],"_annual_",year_intervals[g],"_timmean.nc4"), varname=landCoverVariableIDs[j])
-									}
-								variable_codes = c("croplands","pastures","urbanAreas","primaryForest","primaryNonF","secondaryForest","secondaryNonF")
-								variable_names = c("crops","pasture","urban land","forested primary land","non-forested primary land",
-										  		   "potentially forested secondary land","potentially non-forested secondary land")
-								for (j in 1:length(variable_names))
-									{
-										names = gsub("\\."," ",landCoverVariableNames); indices = which(landCoverVariableNames==variable_names[j])
-										if (length(indices) == 0) indices = which(grepl(variable_names[j],names))
-										if (variable_names[j] == "pasture") indices = c(indices, which(grepl("rangeland",names)))
-										land_cover = land_covers1[[indices[1]]]; names(land_cover) = variable_codes[j]; # print(indices)
-										if (length(indices) > 1)
-											{
-												for (k in 2:length(indices)) land_cover[] = land_cover[]+land_covers1[[indices[k]]][]
-											}
-										land_covers2[[j]] = land_cover[[1]]; land_covers3[[j]] = raster::aggregate(land_cover[[1]],2)
-									}
-								envVariables = list()			
-								envVariables[[1]] = temperature_winter; envVariables[[2]] = temperature_spring
-								envVariables[[3]] = temperature_summer; envVariables[[4]] = temperature_inFall
-								envVariables[[5]] = precipitation_winter; envVariables[[6]] = precipitation_spring
-								envVariables[[7]] = precipitation_summer; envVariables[[8]] = precipitation_inFall
-								envVariables[[9]] = relative_humidity_winter; envVariables[[10]] = relative_humidity_spring
-								envVariables[[11]] = relative_humidity_summer; envVariables[[12]] = relative_humidity_inFall
-								envVariables[[13]] = land_covers2[[4]] # primary forest areas
-								envVariables[[14]] = land_covers2[[5]] # primary non-forest areas
-								envVariables[[15]] = land_covers2[[6]] # secondary forest areas
-								envVariables[[16]] = land_covers2[[7]] # secondary non-forest areas
-								envVariables[[17]] = land_covers2[[1]] # croplands (all catergories)
-								envVariables[[18]] = land_covers2[[2]] # managed pasture + rangeland
-								envVariables[[19]] = population # human population (not log-transformed)
-								for (j in 1:length(envVariables)) envVariables[[j]] = crop(envVariables[[j]], nutsM, snap="out")
-								for (j in 1:length(envVariables)) envVariables[[j]] = mask(envVariables[[j]], nutsM)
-								areas_nuts_M_km = area(nutsM, unit="km")
-								for (j in 1:length(nutsM))
-									{
-										maxArea = 0; polIndex = 0
-										for (k in 1:length(nutsM@polygons[[j]]@Polygons))
-											{
-												if (maxArea < nutsM@polygons[[j]]@Polygons[[k]]@area)
-													{
-														maxArea = nutsM@polygons[[j]]@Polygons[[k]]@area; polIndex = k
-													}
-											}
-										pol1 = nutsM@polygons[[j]]@Polygons[[polIndex]]; p = Polygon(pol1@coords)
-										ps = Polygons(list(p),1); sps = SpatialPolygons(list(ps))
-										pol2 = sf::st_as_sfc(sps); st_crs(pol2) = crs(nutsM)
-										for (k in 1:18)
-											{
-												if ((j == 1)&(k == 1)) crs(envVariables[[k]]) = crs(pol2) 
-												environmentalValues[j,k] = exactextractr::exact_extract(envVariables[[k]], pol2, fun="mean")
-											}
-										if ((j == 1)&(k == 1)) crs(envVariables[[19]]) = crs(pol2) 
-										environmentalValues[j,19] = (log10(exactextractr::exact_extract(envVariables[[19]],pol2,fun="sum")+1))/areas_nuts_M_km[j]
-									}
-								nutsM_datas3[[g]] = environmentalValues
-							}
-						nutsM_datas2[[h]] = nutsM_datas3
-					}
-				nutsM_datas1[[i]] = nutsM_datas2
-			}
-		saveRDS(nutsM_datas1, "ISIMIP3b_dFrames.rds")
-	}	else	{
-		nutsM_datas1 = readRDS("ISIMIP3b_dFrames.rds")
-	}
-nutsM_projections1 = list()
-for (h in 1:length(scenarios))
-	{
-		nutsM_projections2 = list()
-		for (g in 1:length(year_intervals))
-			{
-				for (i in 1:length(models_isimip3b))
-					{
-						df = as.data.frame(nutsM_datas1[[i]][[h]][[g]]); colnames(df) = gsub("-","\\.",colnames(df))
-						if (i == 1) nutsM_projection3 = matrix(nrow=dim(df)[1], ncol=length(models_isimip3b))
-						nutsM_projection4 = matrix(nrow=dim(df)[1], ncol=length(brt_model_scvs))
-						for (j in 1:length(brt_model_scvs))
-							{
-								n.trees = brt_model_scvs[[j]]$gbm.call$best.trees; type = "response"; single.tree = FALSE
-								nutsM_projection4[,j] = predict.gbm(brt_model_scvs[[j]], df, n.trees, type, single.tree)
-							}
-						nutsM_projection5 = matrix(nrow=dim(df)[1], ncol=1)
-						for (j in 1:dim(nutsM_projection4)[1])
-							{
-								nutsM_projection5[j,1] = mean(nutsM_projection4[j,])
-							}
-						nutsM_projection3[,i] = nutsM_projection5
-					}
-				nutsM_projection6 = matrix(nrow=dim(nutsM_projection3)[1], ncol=1)
-				for (i in 1:dim(nutsM_projection3)[1])
-					{
-						nutsM_projection6[i,1] = mean(nutsM_projection4[i,])
-					}
-				nutsM_projections2[[g]] = nutsM_projection6
-			}
-		nutsM_projections1[[h]] = nutsM_projections2
-	}
-if (savingPlots)
-	{
-		pdf(paste0("ISIMIP3b_average_NEW.pdf"), width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")		
-		colourScale = rev(colorRampPalette(brewer.pal(11,"RdBu"))(121)[11:111])
-		for (h in 1:length(scenarios))
-			{
-				plot.new(); plot.new()
-				for (g in 1:length(year_intervals))
-					{
-						cols = colourScale[(((nutsM_projections1[[h]][[g]]-0)/(1-0))*100)+1]
-						plot(contour, lwd=0.4, border="gray30", col=NA)
-						plot(nutsM, col=cols, border=NA, lwd=0.1, add=T); rast = raster(as.matrix(c(0,1)))
-						mtext(scenario_names[h], side=3, line=-1.5, at=1, cex=0.50, col="gray30")
-						mtext(gsub("_","-",year_intervals[g]), side=3, line=-2.3, at=1, cex=0.50, col="gray30")
-					}
-			}
-		dev.off()
-	}
-brt_model_scvs = readRDS(paste0("All_the_BRT_models/gswp3-w5e5_models_SCV.rds"))
-nutsM_projections1 = list()
-for (i in 1:length(models_isimip3b))
-	{
-		nutsM_projections2 = list()
-		for (h in 1:length(scenarios))
-			{
-				nutsM_projections3 = list()
-				for (g in 1:length(year_intervals))
-					{
-						df = as.data.frame(nutsM_datas1[[i]][[h]][[g]]); colnames(df) = gsub("-","\\.",colnames(df))
-						nutsM_projection4 = matrix(nrow=dim(df)[1], ncol=length(brt_model_scvs))
-						for (j in 1:length(brt_model_scvs))
-							{
-								n.trees = brt_model_scvs[[j]]$gbm.call$best.trees; type = "response"; single.tree = FALSE
-								nutsM_projection4[,j] = predict.gbm(brt_model_scvs[[j]], df, n.trees, type, single.tree)
-							}
-						nutsM_projections3[[g]] = nutsM_projection4
-					}
-				nutsM_projections2[[h]] = nutsM_projections3
-			}
-		nutsM_projections1[[i]] = nutsM_projections2
-	}
-if (savingPlots)
-	{
-		for (i in 1:length(nutsM_projections1))
-			{
-				pdf(paste0("ISIMIP3b_projections/ISIMIP3b_",models_isimip3b_names[i],".pdf"), width=8, height=5.8); par(mfrow=c(3,6), oma=c(0,0,0,0), mar=c(0,0,0,0), lwd=0.2, col="gray30")		
-				colourScale = rev(colorRampPalette(brewer.pal(11,"RdBu"))(121)[11:111])
-				for (h in 1:length(scenarios))
-					{
-						plot.new(); plot.new()
-						for (g in 1:length(year_intervals))
-							{
-								nutsM_projection = matrix(nrow=dim(nutsM_projections1[[i]][[h]][[g]])[1], ncol=1)
-								for (j in 1:dim(nutsM_projection)[1])
-									{
-										nutsM_projection[j,1] = mean(nutsM_projections1[[i]][[h]][[g]][j,])
-									}
-								cols = colourScale[(((nutsM_projection[,1]-0)/(1-0))*100)+1]
-								plot(contour, lwd=0.4, border="gray30", col=NA)
-								plot(nutsM, col=cols, border=NA, lwd=0.1, add=T); rast = raster(as.matrix(c(0,1)))
-								mtext(scenario_names[h], side=3, line=-1.5, at=1, cex=0.50, col="gray30")
-								mtext(gsub("_","-",year_intervals[g]), side=3, line=-2.3, at=1, cex=0.50, col="gray30")
-							}
-					}
-				dev.off()
-			}
-	}
-population_counts = matrix(nrow=dim(nutsM@data)[1], ncol=length(year_intervals))
-colnames(population_counts) = year_intervals
-for (i in 1:length(year_intervals))
-	{
-		population = brick(paste0("Environmental_rasters/ISIMIP3b/population_bias-adjustedsoc_5min_annual_",year_intervals[i],"_timmean.nc4"), varname="number_of_people")
-		for (j in 1:length(nutsM))
-			{
-				maxArea = 0; polIndex = 0
-				for (k in 1:length(nutsM@polygons[[j]]@Polygons))
-					{
-						if (maxArea < nutsM@polygons[[j]]@Polygons[[k]]@area)
-							{
-								maxArea = nutsM@polygons[[j]]@Polygons[[k]]@area; polIndex = k
-							}
-					}
-				pol1 = nutsM@polygons[[j]]@Polygons[[polIndex]]; p = Polygon(pol1@coords)
-				ps = Polygons(list(p),1); sps = SpatialPolygons(list(ps))
-				pol2 = sf::st_as_sfc(sps); st_crs(pol2) = crs(nutsM)
-				if (j == 1) crs(population) = crs(pol2) 
-				population_counts[j,i] = exactextractr::exact_extract(population, pol2, fun="sum")
-			}
-	}
-if (savingPlots)
-	{
-		colours1 = c(rgb(194,230,153,255,maxColorValue=255), rgb(120,198,121,255,maxColorValue=255), rgb(49,163,84,255,maxColorValue=255))
-		colours2 = c(rgb(194,230,153,125,maxColorValue=255), rgb(120,198,121,125,maxColorValue=255), rgb(49,163,84,125,maxColorValue=255))
-		cols1 = c(rep(colours1[1], length(year_intervals)), rep(colours1[2], length(year_intervals)), rep(colours1[3], length(year_intervals)))
-		cols2 = c(rep(colours2[1], length(year_intervals)), rep(colours2[2], length(year_intervals)), rep(colours2[3], length(year_intervals)))
-		for (i in 1:length(thresholds))
-			{
-				tab = matrix(nrow=10*10, ncol=(3*4)); colNames = c()
-				for (j in 1:length(scenarios))
-					{
-						for (k in 1:length(year_intervals))
-							{
-								colNames = c(colNames, paste0(scenarios[j],"_",year_intervals[k]))
-								for (l in 1:length(models_isimip3b))
-									{
-										for (m in 1:dim(nutsM_projections1[[l]][[j]][[k]])[2])
-											{
-												vS = population_counts[,k]
-												vS[which(nutsM_projections1[[l]][[j]][[k]][,m]<thresholds[i])] = 0
-												tab[((l-1)*dim(nutsM_projections1[[l]][[j]][[k]])[2])+m,((j-1)*length(year_intervals))+k] = sum(vS)
-											}
-									}
-							}
-					}
-				colnames(tab) = colNames
-				if (savingFiles) write.csv(tab, paste0("ISIMIP3b_allModels_",gsub("\\.",",",as.character(thresholds[i])),".csv"), row.names=F, quote=F)
-				pdf(paste0("ISIMIP3b_violin_",gsub("\\.",",",as.character(thresholds[i])),"_NEW.pdf"), width=4, height=2.2)
-				par(mfrow=c(1,1), oma=c(0,0,0,0), mar=c(1.5,1.5,0,0), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
-				# if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.9*(10^8),1.9*(10^8)), axes=F, ann=F)
-				if (i == 1) plot(0:1, 0:1, type="n", xlim=c(198.5,209.5), ylim=c(1.5*(10^8),4.2*(10^8)), axes=F, ann=F)
-				if (i == 2) plot(0:1, 0:1, type="n", xlim=c(198.5,209.5), ylim=c(0,10.1*(10^7)), axes=F, ann=F)
-				vioplot(tab, ann=F, axes=F, at=rep(c(2030,2050,2070,2090)/10,3), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
-				axis(1, at=c(1970,1990,2010,2030,2050,2070,2090,2110,2130)/10, labels=c(1970,1990,2010,2030,2050,2070,2090,2110,2130), mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
-				if (i == 1) axis(2, at=seq(1.0*(10^8),4.5*(10^8),5*(10^7)), labels=c(100,150,200,250,300,350,400,450), mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
-				if (i == 2) axis(2, at=seq(-10^7,12*(10^7),2*(10^7)), labels=c(0,20,40,60,80,100,120), mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
-				if (h == 2) title(ylab="Population at risk (in million people)", cex.lab=0.80, mgp=c(1.5,0,0), col.lab="gray30")
-				dev.off()
-			}
-	}
-
-# 6. Compressing the environmental files for GitHub
-
-directories = c("Environmental_rasters/ISIMIP3a","Environmental_rasters/ISIMIP3b"); wd = getwd()
-for (i in 1:length(directories))
-	{
-		files = list.files(directories[i]); files = files[which(grepl("\\.nc",files))]
-		setwd(paste0(wd,"/",directories[i]))
-		for (j in 1:length(files))
-			{
-				system(paste0("tar -zcvf ",gsub("\\.nc","\\.tar.gz",gsub("\\.nc4","\\.tar.gz",files[j]))," ",files[j]))
-			}
-		setwd(wd)
-	}
-	
