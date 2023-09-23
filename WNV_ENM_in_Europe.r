@@ -14,8 +14,22 @@ library(rgeos)
 library(sf)
 library(vioplot)
 
-savingPlots = FALSE
-showingPlots = FALSE
+# 1. Preparing the data frame with the WNV occurrence data + visualisation
+# 2. Training the BRT models for all the subsequent projections
+# 3. Computation of the prevalence-pseudoabsence-calibrated Sørensen index
+# 4. Computing and comparing the relative influences and response curves
+# 5. Performing the past and present ecological niche projections
+
+# Note on the environmental rasters:
+	# - 4 models for the past and present projections (obsclim and counterclim): GSWP3-W5E5, 20CRv3, 20CRv3-ERA5, and 20CRv3-W5E5;
+	#		and 6 periods: 1901-1919, 1920-1939, 1940-1959, 1960-1979, 1980-1999, and 2000-2019 for temperature, precipitation and
+	#		relative humidity. Population and land cover data do not change between models
+	# - 10 models for the future projections (bias-adjusted): MRI-ESM2-0, MPI-ESM1-2-HR, MIROC6, IPSL-CM6A-LR, GFDL-ESM4, EC-Earth3,
+	#		CNRM-ESM2-1, CNRM-CM6-1, CanESM5, and UKESM1-0-LL; and 5 periods: 1995-2014, 2020-2039, 2040-2059, 2060-2079, and 2080-2099
+	# - climatic variables: "hur" = near surface relative humidity, "pr" = precipitation, and "tas" = near surface air temperature;
+	#		units: relative humidity in % (??, some values >100), temperature in Kelvins (°C+273.15), and precipitation in kg/m2/second
+
+savingPlots = FALSE; showingPlots = FALSE; writingFiles = FALSE
 
 # 1. Preparing the data frame with the WNV occurrence data + visualisation
 
@@ -490,15 +504,15 @@ samplingPtsMinDist = function(observations, minDist=500, nberOfPoints=5)
 		dists = list(spDistsN1(as.matrix(observations), as.matrix(observations[indices[1],]), longlat=T))
 		for (i in 2:nberOfPoints)
 			{
-    				selection = which(dists[[(i-1)]] > minDist)
-    				if (length(selection) == 0)
-    					{
-    						stop("Restarts the function with a smaller minimum distance")
-						}
-    				selection_list[[i]] = selection
-    				test = table(unlist(selection_list))
-    				indices_minDist = as.numeric(names(which(test==i)))
-    				indices[i] = sample(indices_minDist, 1)   
+    			selection = which(dists[[(i-1)]] > minDist)
+    			if (length(selection) == 0)
+    				{
+    					stop("Restarts the function with a smaller minimum distance")
+					}
+    			selection_list[[i]] = selection
+    			test = table(unlist(selection_list))
+    			indices_minDist = as.numeric(names(which(test==i)))
+    			indices[i] = sample(indices_minDist, 1)   
 				dists[[i]] = spDistsN1(as.matrix(observations), as.matrix(observations[indices[i],]), longlat=T)
 			}
 		return(indices)
@@ -509,7 +523,7 @@ foldSelection = function(observations, selectedPoints)
 		fold_selection = sapply(1:nrow(observations), function(i) which.min(spDistsN1(as.matrix(selectedPoints), as.matrix(observations[i,]), longlat=T)))
 		return(fold_selection)
 	}
-training_new_models = FALSE
+training_new_models = FALSE; nberOfReplicates = 10
 if (training_new_models)
 	{
 		for (i in 1:length(models_isimip3a))
@@ -538,7 +552,6 @@ if (training_new_models)
 						title(ylab="correlation", cex.lab=0.7, mgp=c(0.4,0,0), col.lab="gray30")
 					}
 				theRanges = c(500,500)*1000 # distance in meters
-				nberOfReplicates = 10 # one replicate = one folds partition
 				gbm.x = colnames(data)[2:dim(data)[2]]
 				gbm.y = "observations"
 				offset = NULL
@@ -637,9 +650,76 @@ if (savingPlots)
 		dev.off()
 	}
 
-# 3. Compouting the relative influences and response curves
+# 3. Computation of the prevalence-pseudoabsence-calibrated Sørensen index
 
-	# 3.1. Comparison of the relative influence of each environmental factor
+	# Sources:
+		# - computation performed according to the formulas of Leroi et al. (2018, J. Biogeography)
+		# - optimisation of the threshold with a 0.01 step increment according to Li & Guo (2013, Ecography)
+
+tabs_list1 = list()
+SIppcs = matrix(nrow=nberOfReplicates, ncol=length(models_isimip3a)); colnames(SIppcs) = models_isimip3a
+thresholds = matrix(nrow=nberOfReplicates, ncol=length(models_isimip3a)); colnames(thresholds) = models_isimip3a
+for (i in 1:length(models_isimip3a))
+	{
+		indices = c(); tabs_list2 = list()
+		data = data.frame(as.matrix(nutsM_datas[[i]][,3:dim(nutsM_datas[[i]])[2]]))
+		for (j in 1:dim(data)[1])
+			{
+				if (sum(!is.na(data[j,1:dim(data)[2]])) == dim(data)[2]) indices = c(indices, j)
+			}
+		data = data[indices,]; data[which(data[,"observations"]>0),"observations"] = 1
+		brt_model_scvs = readRDS(paste0("All_the_BRT_models/",models_isimip3a[i],"_models_SCV.rds"))
+		for (j in 1:length(brt_model_scvs))
+			{
+				tmp = matrix(nrow=101, ncol=2); tmp[,1] = seq(0,1,0.01)
+				df = brt_model_scvs[[j]]$gbm.call$dataframe
+				responses = df$observations; data = df[,2:dim(df)[2]]
+				n.trees = brt_model_scvs[[j]]$gbm.call$best.trees; type = "response"; single.tree = FALSE
+				prediction = predict.gbm(brt_model_scvs[[j]], data, n.trees, type, single.tree)		
+				N = dim(data)[1]; P = sum(responses==1); A = sum(responses==0)
+				prev = P/(P+A) # proportion of recorded sites where the species is present
+				x = (P/A)*((1-prev)/prev); sorensen_ppc = 0
+				for (threshold in seq(0,1,0.01))
+					{
+						TP = length(which((responses==1)&(prediction>=threshold))) # true positives
+						FN = length(which((responses==1)&(prediction<threshold))) # false negatives
+						FP_pa = length(which((responses==0)&(prediction>=threshold))) # false positives
+						sorensen_ppc_tmp = (2*TP)/((2*TP)+(x*FP_pa)+(FN))
+						tmp[which(tmp[,1]==threshold),2] = sorensen_ppc_tmp
+						if (sorensen_ppc < sorensen_ppc_tmp)
+							{
+								sorensen_ppc = sorensen_ppc_tmp
+								optimised_threshold = threshold
+							}
+					}
+				tabs_list2[[j]] = tmp
+				SIppcs[j,i] = sorensen_ppc
+				thresholds[j,i] = optimised_threshold
+			}
+		tabs_list1[[i]] = tabs_list2
+	}
+if (writingFiles) write.csv(SIppcs, "ISIMIP3a_SI_ppcs.csv", row.names=F, quote=F)
+if (writingFiles) write.csv(thresholds, "ISIMIP3a_SI_thres.csv", row.names=F, quote=F)
+if (savingPlots)
+	{
+		pdf(paste0("ISIMIP3a_SI_ppcs_NEW.pdf"), width=8, height=1.8)
+		par(mfrow=c(1,4), oma=c(0,0.3,0,0), mar=c(2.5,2.5,0.5,0.5), lwd=0.4, col="gray30")
+		for (i in 1:length(models_isimip3a))
+			{
+				plot(tabs_list1[[i]][[1]], col=NA, ann=F, axes=F, xlim=c(0,1), ylim=c(0,1))
+				for (j in 1:length(tabs_list1[[i]])) lines(tabs_list1[[i]][[j]], lwd=0.3, col="gray80", lty=1)
+				axis(side=1, lwd.tick=0.2, cex.axis=0.7, lwd=0, tck=-0.025, col.axis="gray30", mgp=c(0,0.14,0))
+				axis(side=2, lwd.tick=0.2, cex.axis=0.7, lwd=0, tck=-0.025, col.axis="gray30", mgp=c(0,0.35,0))
+				if (i == 1) title(ylab=expression("SI"["ppc"]), cex.lab=0.9, mgp=c(1.3,0,0), col.lab="gray30")
+				title(xlab="threshold", cex.lab=0.9, mgp=c(1.1,0,0), col.lab="gray30"); box(lwd=0.2, col="gray30")
+				mtext(paste0(models_isimip3a_names[i]), side=3, line=-1.3, at=0.995, cex=0.55, col="gray30", adj=1)
+			}
+		dev.off()
+	}
+
+# 4. Computing and comparing the relative influences and response curves
+
+	# 4.1. Comparison of the relative influence of each environmental factor
 
 computing_relative_influences = FALSE
 if (computing_relative_influences)
@@ -661,7 +741,7 @@ if (computing_relative_influences)
 		write.table(round(relativeInfluences,1), "Relative_influences.csv", quote=F, sep=",")
 	}
 
-	# 3.2. Comparison of the response curves for each environmental factor
+	# 4.2. Comparison of the response curves for each environmental factor
 
 envVariableValues_list = list()
 for (i in 1:length(models_isimip3a))
@@ -675,15 +755,17 @@ for (i in 1:length(models_isimip3a))
 		data = data[indices,]; centroids = centroids[indices,]
 		data[which(data[,"observations"]>0),"observations"] = 1
 		data = data[which(data[,"observations"]==1),]
-		envVariableValues = matrix(nrow=3, ncol=length(envVariableNames))
-		row.names(envVariableValues) = c("median","minV","maxV")
+		envVariableValues = matrix(nrow=5, ncol=length(envVariableNames))
+		row.names(envVariableValues) = c("median","q1","q3","minV","maxV")
 		colnames(envVariableValues) = envVariableNames
 		for (j in 1:length(envVariableNames))
 			{
 				minV = min(data[,gsub("-","\\.",envVariableNames)[j]], na.rm=T)
 				maxV = max(data[,gsub("-","\\.",envVariableNames)[j]], na.rm=T)
 				medianV = median(data[,gsub("-","\\.",envVariableNames)[j]], na.rm=T)
-				envVariableValues[,j] = cbind(medianV, minV, maxV)
+				q1V = quantile(data[,gsub("-","\\.",envVariableNames)[j]], probs=0.25, na.rm=T)
+				q3V = quantile(data[,gsub("-","\\.",envVariableNames)[j]], probs=0.75, na.rm=T)
+				envVariableValues[,j] = cbind(medianV, q1V, q3V, minV, maxV)
 			}
 		envVariableValues_list[[i]] = envVariableValues
 	}
@@ -692,48 +774,61 @@ if (savingPlots)
 		pdf("Response_curves_NEW.pdf", width=8, height=5); par(mfrow=c(4,5), oma=c(1.3,1.5,1,0.5), mar=c(2.5,1,0.5,1), lwd=0.2, col="gray30")
 		for (i in 1:length(envVariableNames))
 			{
-				projections_list = list(); dfs = list()
-				for (j in 1:1)
+				quantiles = c("median","q1","q3") # quantiles = c("median")
+				projections_list1 = list(); dfs1 = list()
+				for (h in 1:length(quantiles))
 					{
-						valuesInterval = 0.1; valuesInterval = (envVariableValues_list[[j]]["maxV",i]-envVariableValues_list[[j]]["minV",i])/100
-						df = data.frame(matrix(nrow=length(seq(envVariableValues_list[[j]]["minV",i],envVariableValues_list[[j]]["maxV",i],valuesInterval)),ncol=length(envVariableNames)))
-						colnames(df) = gsub("-","\\.",envVariableNames)
-						for (k in 1:length(envVariableNames))
-							{
-								valuesInterval = 0.1; valuesInterval = (envVariableValues_list[[j]]["maxV",k]-envVariableValues_list[[j]]["minV",k])/100
-								if (i == k) df[,gsub("-","\\.",envVariableNames)[k]] = seq(envVariableValues_list[[j]]["minV",k],envVariableValues_list[[j]]["maxV",k],valuesInterval)
-								if (i != k) df[,gsub("-","\\.",envVariableNames)[k]] = rep(envVariableValues_list[[j]]["median",k],dim(df)[1])
-							}
-						dfs[[j]] = df; projections = list()
-						brt_model_scvs = readRDS(paste0("All_the_BRT_models/",models_isimip3a[j],"_models_SCV.rds"))
-						for (k in 1:length(brt_model_scvs))
-							{
-								n.trees = brt_model_scvs[[k]]$gbm.call$best.trees; type = "response"; single.tree = FALSE
-								projection = predict.gbm(brt_model_scvs[[k]], newdata=df, n.trees, type, single.tree)
-								if ((j == 1)&(k == 1))
-									{
-										minX = min(df[,gsub("-","\\.",envVariableNames)[i]]); maxX = max(df[,gsub("-","\\.",envVariableNames)[i]])
-										minY = min(projection); maxY = max(projection)
-									}	else	{
-										if (minX > min(df[,gsub("-","\\.",envVariableNames)[i]])) minX = min(df[,gsub("-","\\.",envVariableNames)[i]])
-										if (maxX < max(df[,gsub("-","\\.",envVariableNames)[i]])) maxX = max(df[,gsub("-","\\.",envVariableNames)[i]])
-										if (minY > min(projection)) minY = min(projection)
-										if (maxY < max(projection)) maxY = max(projection)
-									}
-								projections[[k]] = projection
-							}
-						projections_list[[j]] = projections
-					}
-				cols = c("red","chartreuse3")
-				for (k in 1:length(brt_model_scvs))
-					{
+						projections_list2 = list(); dfs2 = list()
 						for (j in 1:1)
 							{
-								if ((j == 1)&(k == 1))
+								valuesInterval = 0.1; valuesInterval = (envVariableValues_list[[j]]["maxV",i]-envVariableValues_list[[j]]["minV",i])/100
+								df = data.frame(matrix(nrow=length(seq(envVariableValues_list[[j]]["minV",i],envVariableValues_list[[j]]["maxV",i],valuesInterval)),ncol=length(envVariableNames)))
+								colnames(df) = gsub("-","\\.",envVariableNames)
+								for (k in 1:length(envVariableNames))
 									{
-										plot(dfs[[j]][,gsub("-","\\.",envVariableNames)[i]],projections_list[[j]][[k]],col=cols[j],ann=F,axes=F,lwd=0.2,type="l",xlim=c(minX,maxX),ylim=c(minY,maxY))
-									}	else	{
-										lines(dfs[[j]][,gsub("-","\\.",envVariableNames)[i]],projections_list[[j]][[k]],col=cols[j],lwd=0.2)
+										valuesInterval = 0.1; valuesInterval = (envVariableValues_list[[j]]["maxV",k]-envVariableValues_list[[j]]["minV",k])/100
+										if (i == k) df[,gsub("-","\\.",envVariableNames)[k]] = seq(envVariableValues_list[[j]]["minV",k],envVariableValues_list[[j]]["maxV",k],valuesInterval)
+										if (i != k) df[,gsub("-","\\.",envVariableNames)[k]] = rep(envVariableValues_list[[j]][quantiles[h],k],dim(df)[1])
+									}
+								dfs2[[j]] = df; projections = list()
+								brt_model_scvs = readRDS(paste0("All_the_BRT_models/",models_isimip3a[j],"_models_SCV.rds"))
+								for (k in 1:length(brt_model_scvs))
+									{
+										n.trees = brt_model_scvs[[k]]$gbm.call$best.trees; type = "response"; single.tree = FALSE
+										projection = predict.gbm(brt_model_scvs[[k]], newdata=df, n.trees, type, single.tree)
+										if ((h == 1)&(j == 1)&(k == 1))
+											{
+												minX = min(df[,gsub("-","\\.",envVariableNames)[i]]); maxX = max(df[,gsub("-","\\.",envVariableNames)[i]])
+												minY = min(projection); maxY = max(projection)
+											}	else	{
+												if (minX > min(df[,gsub("-","\\.",envVariableNames)[i]])) minX = min(df[,gsub("-","\\.",envVariableNames)[i]])
+												if (maxX < max(df[,gsub("-","\\.",envVariableNames)[i]])) maxX = max(df[,gsub("-","\\.",envVariableNames)[i]])
+												if (minY > min(projection)) minY = min(projection)
+												if (maxY < max(projection)) maxY = max(projection)
+											}
+										projections[[k]] = projection
+									}
+								projections_list2[[j]] = projections
+							}
+						projections_list1[[h]] = projections_list2; dfs1[[h]] = dfs2
+					}
+				cols1 = list(); cols2 = list()
+				cols1[[1]] = rgb(222,67,39,255,maxColorValue=255); cols2[[1]] = rgb(222,67,39,100,maxColorValue=255) # red
+				cols1[[2]] = rgb(250,165,33,255,maxColorValue=255); cols2[[2]] = rgb(250,165,33,100,maxColorValue=255) # orange
+				cols1[[3]] = rgb(70,118,187,255,maxColorValue=255); cols2[[3]] = rgb(70,118,187,100,maxColorValue=255) # blue
+				for (h in length(quantiles):1)
+					{
+						for (k in 1:length(brt_model_scvs))
+							{
+								for (j in 1:1)
+									{
+										if ((h == length(quantiles))&(j == 1)&(k == 1))
+											{
+												plot(dfs1[[h]][[j]][,gsub("-","\\.",envVariableNames)[i]], projections_list1[[h]][[j]][[k]],
+													 col=cols1[[h]], ann=F, axes=F, lwd=0.2, type="l", xlim=c(minX,maxX), ylim=c(minY,maxY))
+											}	else	{
+												lines(dfs1[[h]][[j]][,gsub("-","\\.",envVariableNames)[i]], projections_list1[[h]][[j]][[k]], col=cols1[[h]], lwd=0.2)
+											}
 									}
 							}
 					}
@@ -746,7 +841,7 @@ if (savingPlots)
 		dev.off()
 	}
 
-# 4. Performing the past and present ENM projections
+# 5. Performing the past and present ecological niche projections
 
 scenarios = c("counterclim","obsclim"); savingFiles = FALSE
 year_intervals = c("1901_1919","1920_1939","1940_1959","1960_1979","1980_1999","2000_2019")
@@ -1041,46 +1136,9 @@ if (savingPlots)
 		colours2 = c(rgb(255,127,14,125,maxColorValue=255), rgb(31,119,180,125,maxColorValue=255))
 		cols1 = c(rep(colours1[1], length(year_intervals)), rep(colours1[2], length(year_intervals)))
 		cols2 = c(rep(colours2[1], length(year_intervals)), rep(colours2[2], length(year_intervals)))
-		thresholds = c(0.1, 0.5)
-		for (i in 1:length(thresholds))
-			{
-				tab = matrix(nrow=10, ncol=12); colNames = c()
-				for (j in 1:length(year_intervals))
-					{
-						colNames = c(colNames, paste0(year_intervals[j],"_counterclim"))
-						for (k in 1:dim(nutsM_projections1[[1]][[1]][[j]])[2])
-							{
-								vS = population_counts[,j]
-								vS[which(nutsM_projections1[[1]][[1]][[j]][,k]<thresholds[i])] = 0
-								tab[k,j] = sum(vS)
-							}
-					}
-				for (j in 1:length(year_intervals))
-					{
-						colNames = c(colNames, paste0(year_intervals[j],"_obsclim"))
-						for (k in 1:dim(nutsM_projections1[[1]][[2]][[j]])[2])
-							{
-								vS = population_counts[,j]
-								vS[which(nutsM_projections1[[1]][[2]][[j]][,k]<thresholds[i])] = 0
-								tab[k,6+j] = sum(vS)
-							}
-					}
-				colnames(tab) = colNames
-				if (savingFiles) write.csv(tab, paste0("ISIMIP3a_model1_",gsub("\\.",",",as.character(thresholds[i])),".csv"), row.names=F, quote=F)
-				pdf(paste0("ISIMIP3a_violin_plots_NEW1.pdf"), width=4, height=2.2)
-				par(mfrow=c(1,1), oma=c(0,0,0,0), mar=c(1.5,1.5,0,0), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
-				if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.55*(10^8),1.9*(10^8)), axes=F, ann=F)
-				if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.3*(10^7),5.7*(10^7)), axes=F, ann=F)
-				vioplot(tab, ann=F, axes=F, at=rep(c(1910,1930,1950,1970,1990,2010)/10,2), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
-				axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030), 
-					 mgp=c(0,0.11,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
-				if (i == 1) axis(2, at=seq(0.3*(10^8),2.1*(10^8),3*(10^7)), labels=c(30,60,90,120,150,180,210), 
-					 mgp=c(1,0.30,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
-				if (i == 2) axis(2, at=seq(0,6*(10^7),10^7), labels=c(0,10,20,30,40,50,60), mgp=c(1,0.30,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.03, col="gray30", col.axis="gray30", col.lab="gray30")
-				dev.off()
-			}
-		pdf(paste0("ISIMIP3a_violin_plots_NEW2.pdf"), width=8, height=3.3)
-		par(mfrow=c(2,4), oma=c(0,1,0.5,0), mar=c(1.5,2.2,0.5,0.75), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
+		thresholds = c("0.1", "SIppc", "0.5"); SI_ppc_thresholds = read.csv("ISIMIP3a_SI_thres.csv", head=T)
+		pdf(paste0("ISIMIP3a_violin_plots_NEW.pdf"), width=8, height=4.95)
+		par(mfrow=c(3,4), oma=c(0,1,0.5,0), mar=c(1.5,2.2,0.5,0.75), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
 		for (i in 1:length(thresholds))
 			{
 				for (h in 1:length(models_isimip3a))
@@ -1091,26 +1149,38 @@ if (savingPlots)
 								colNames = c(colNames, paste0(year_intervals[j],"_counterclim"))
 								for (k in 1:dim(nutsM_projections1[[h]][[1]][[j]])[2])
 									{
+										if (thresholds[i] == "SIppc")
+											{
+												threshold = SI_ppc_thresholds[k,h]
+											}	else	{
+												threshold = as.numeric(thresholds[i])
+											}
 										vS = population_counts[,j]
-										vS[which(nutsM_projections1[[h]][[1]][[j]][,k]<thresholds[i])] = 0
+										vS[which(nutsM_projections1[[h]][[1]][[j]][,k]<threshold)] = 0
 										tab[k,j] = sum(vS)
-									}
-								
+									}						
 							}
 						for (j in 1:length(year_intervals))
 							{
 								colNames = c(colNames, paste0(year_intervals[j],"_obsclim"))
 								for (k in 1:dim(nutsM_projections1[[h]][[2]][[j]])[2])
 									{
+										if (thresholds[i] == "SIppc")
+											{
+												threshold = SI_ppc_thresholds[k,h]
+											}	else	{
+												threshold = as.numeric(thresholds[i])
+											}
 										vS = population_counts[,j]
-										vS[which(nutsM_projections1[[h]][[2]][[j]][,k]<thresholds[i])] = 0
+										vS[which(nutsM_projections1[[h]][[2]][[j]][,k]<threshold)] = 0
 										tab[k,6+j] = sum(vS)
 									}
 							}
 						colnames(tab) = colNames
 						if (savingFiles) write.csv(tab, paste0("ISIMIP3a_model",h,"_",gsub("\\.",",",as.character(thresholds[i])),".csv"), row.names=F, quote=F)
 						if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.57*(10^8),1.83*(10^8)), axes=F, ann=F)
-						if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.0*(10^7),6.2*(10^7)), axes=F, ann=F)
+						if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.0*(10^7),9.0*(10^7)), axes=F, ann=F)
+						if (i == 3) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.0*(10^7),6.2*(10^7)), axes=F, ann=F)
 						vioplot(tab, ann=F, axes=F, at=rep(c(1910,1930,1950,1970,1990,2010)/10,2), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
 						if (i == 1) 
 							{
@@ -1123,6 +1193,13 @@ if (savingPlots)
 							{
 								axis(1, pos=0, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030),
 									 mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
+								axis(2, at=seq(0,9*(10^7),10^7), labels=c(0,10,20,30,40,50,60,70,80,90),
+									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
+							}
+						if (i == 3) 
+							{
+								axis(1, pos=0, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030),
+									 mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
 								axis(2, at=seq(0,7*(10^7),10^7), labels=c(0,10,20,30,40,50,60,70),
 									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
 							}
@@ -1130,56 +1207,6 @@ if (savingPlots)
 						# mtext(paste0(models_isimip3a_names[h]," - ecological suitability >",as.character(thresholds[i])), side=3, at=196, line=-0.8, cex=0.5, col="gray30")
 						mtext(paste0(models_isimip3a_names[h]), side=3, adj=0, at=190.8, line=-0.6, cex=0.5, col="gray30")
 						mtext(paste0("ES >",as.character(thresholds[i])), side=3, adj=0, at=190.8, line=-1.4, cex=0.5, col="gray30")
-					}
-			}
-		dev.off()
-		pdf(paste0("ISIMIP3a_violin_plots_NEW3.pdf"), width=8, height=3.6)
-		par(mfrow=c(2,3), oma=c(0,1,0,0), mar=c(2,2.5,0,0), mgp=c(1.2,0.75,0), lwd=0.2, col="gray30")
-		for (i in 1:length(thresholds))
-			{
-				for (h in 2:length(models_isimip3a))
-					{
-						tab = matrix(nrow=10, ncol=12); colNames = c()
-						for (j in 1:length(year_intervals))
-							{
-								colNames = c(colNames, paste0(year_intervals[j],"_counterclim"))
-								for (k in 1:dim(nutsM_projections1[[h]][[1]][[j]])[2])
-									{
-										vS = population_counts[,j]
-										vS[which(nutsM_projections1[[h]][[1]][[j]][,k]<thresholds[i])] = 0
-										tab[k,j] = sum(vS)
-									}
-								
-							}
-						for (j in 1:length(year_intervals))
-							{
-								colNames = c(colNames, paste0(year_intervals[j],"_obsclim"))
-								for (k in 1:dim(nutsM_projections1[[h]][[2]][[j]])[2])
-									{
-										vS = population_counts[,j]
-										vS[which(nutsM_projections1[[h]][[2]][[j]][,k]<thresholds[i])] = 0
-										tab[k,6+j] = sum(vS)
-									}
-							}
-						colnames(tab) = colNames
-						if (savingFiles) write.csv(tab, paste0("ISIMIP3a_model",h,"_",gsub("\\.",",",as.character(thresholds[i])),".csv"), row.names=F, quote=F)
-						if (i == 1) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.63*(10^8),1.83*(10^8)), axes=F, ann=F)
-						if (i == 2) plot(0:1, 0:1, type="n", xlim=c(190.5,201.5), ylim=c(0.8*(10^7),6.2*(10^7)), axes=F, ann=F)
-						vioplot(tab, ann=F, axes=F, at=rep(c(1910,1930,1950,1970,1990,2010)/10,2), border=cols1, col=cols2, use.cols=T, horizontal=F, lineCol=NA, rectCol=NA, colMed=NA, add=T)
-						axis(1, at=c(1880,1910,1930,1950,1970,1990,2010,2030)/10, labels=c(1880,1910,1930,1950,1970,1990,2010,2030),
-							 mgp=c(0,0.06,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.025, col="gray30", col.axis="gray30", col.lab="gray30")
-						if (i == 1)
-							{
-								axis(2, at=seq(0.5*(10^8),1.9*(10^8),2*(10^7)), labels=c(50,70,90,110,130,150,170,190),
-									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
-							}
-						if (i == 2)
-							{
-								axis(2, at=seq(0,7*(10^7),10^7), labels=c(0,10,20,30,40,50,60,70),
-									 mgp=c(1,0.20,0), lwd.tick=0.2, cex.axis=0.65, lwd=0.2, tck=-0.02, col="gray30", col.axis="gray30", col.lab="gray30")
-							}
-						if (h == 2) title(ylab="Population at risk (in million people)", cex.lab=0.80, mgp=c(1.5,0,0), col.lab="gray30")
-						mtext(paste0(models_isimip3a_names[h]," - ecological suitability >",as.character(thresholds[i])), side=3, at=196, line=-0.8, cex=0.5, col="gray30")
 					}
 			}
 		dev.off()
